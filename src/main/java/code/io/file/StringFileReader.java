@@ -13,7 +13,7 @@ import java.util.List;
  * @author zixiao
  * @date 19/1/10
  */
-public class StringFileReader {
+public class StringFileReader implements Closeable{
 
     private BufferedRandomAccessFile reader;
 
@@ -50,7 +50,7 @@ public class StringFileReader {
     /**
      * 使用BufferedRandomAccessFile读取文件
      *
-     * @param pos    偏移量
+     * @param pos    偏移量，从0开始
      * @param limit  读取行数
      * @return  数据列表
      */
@@ -78,7 +78,7 @@ public class StringFileReader {
         closeQuietly(reader);
     }
 
-    private static void closeQuietly(Closeable closeable) {
+    private void closeQuietly(Closeable closeable) {
         try {
             if (closeable != null) {
                 closeable.close();
