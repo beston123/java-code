@@ -42,7 +42,16 @@ public class RequestVoteReq implements Serializable{
      */
     private int lastLogTerm;
 
+    /**
+     * 是否预投票
+     */
+    private boolean preVote;
+
     public static RequestVoteReq build(int term, String candidateId, int lastLogIndex, int lastLogTerm){
-        return new RequestVoteReq(term, candidateId, lastLogIndex, lastLogTerm);
+        return new RequestVoteReq(term, candidateId, lastLogIndex, lastLogTerm, false);
+    }
+
+    public static RequestVoteReq build(int term, String candidateId, int lastLogIndex, int lastLogTerm, boolean preVote){
+        return new RequestVoteReq(term, candidateId, lastLogIndex, lastLogTerm, preVote);
     }
 }

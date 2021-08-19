@@ -6,13 +6,16 @@ import code.distribution.raft.log.LogModule;
 import code.distribution.raft.model.LogEntry;
 import code.distribution.raft.model.VoteFor;
 import code.distribution.raft.util.SnapshotUtils;
+import code.util.NamedThreadFactory;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -95,9 +98,25 @@ public class RaftNode implements Serializable{
      */
     private transient Map<String, Integer> matchIndex = new HashMap<>(32);
 
+    /**
+     * 当前leaderId
+     */
     private String leaderId;
 
-    private transient ReentrantReadWriteLock logLock = new ReentrantReadWriteLock();
+    /**
+     * 上次接受leaderRpc请求时间
+     */
+    private AtomicLong lastRpcTimestamp = new AtomicLong(0);
+
+    /**
+     * 日志应用到状态机线程
+     */
+    private ThreadPoolExecutor logApplyExecutor = new ThreadPoolExecutor(1, 1,
+            5, TimeUnit.MINUTES,
+            new LinkedBlockingQueue<>(1024),
+            new NamedThreadFactory("RetryAppendEntriesTimer-"),
+            new ThreadPoolExecutor.CallerRunsPolicy());
+
 
     private transient ReentrantLock voteLock = new ReentrantLock();
 
@@ -116,14 +135,36 @@ public class RaftNode implements Serializable{
         return this.currentTerm.get();
     }
 
+    /**
+     * 距离上次leaderRpc更新的时间差
+     * @return
+     */
+    public long elapsedLastRpcTime(){
+        return System.currentTimeMillis() - lastRpcTimestamp.get();
+    }
+
+    protected boolean compareAndSetTerm(int curTerm, int newTerm){
+        return currentTerm.compareAndSet(curTerm, newTerm);
+    }
+
     public void setCommitIndex(int value){
         this.commitIndex.set(value);
     }
 
+    public void setLeader(String leaderId){
+        this.leaderId = leaderId;
+    }
+
+    /**
+     * 投票给候选人
+     * @param candidateId
+     * @param term
+     * @return
+     */
     public boolean voteFor(String candidateId, int term){
         voteLock.lock();
         try {
-            boolean success = canBeVoteFor(candidateId, term);
+            boolean success = canVoteFor(candidateId, term);
             if(success){
                 voteFor = new VoteFor(candidateId, term);
             }
@@ -133,12 +174,20 @@ public class RaftNode implements Serializable{
         }
     }
 
-    public boolean canBeVoteFor(String candidateId, int term){
+    /**
+     * 是否可以投票给候选人
+     * 条件：只有未投票，或者term比已投候选人的term更大时，可以投票
+     * 保证在同一个term中，只能投给一个候选人
+     * @param candidateId
+     * @param candidateTerm
+     * @return
+     */
+    public boolean canVoteFor(String candidateId, int candidateTerm){
         if(voteFor == null){
             return true;
-        }else if(voteFor.getTerm() < term){
+        }else if(voteFor.getTerm() < candidateTerm){
             return true;
-        }else if(voteFor.getTerm() == term && voteFor.getNodeId().equals(candidateId)){
+        }else if(voteFor.getTerm() == candidateTerm && voteFor.getNodeId().equals(candidateId)){
             return true;
         }
         return false;
@@ -146,25 +195,21 @@ public class RaftNode implements Serializable{
 
     /*************************************** role change ***************************************/
 
-    public void changeToCandidate(){
+    protected void changeToCandidate(){
         if(role == RoleType.FOLLOWER){
             role = RoleType.CANDIDATE;
         }
     }
 
-    public void changeToLeader(){
+    protected void changeToLeader(){
         if(role == RoleType.CANDIDATE){
             role = RoleType.LEADER;
             initIndex();
         }
     }
 
-    public void changeToFollower(){
+    protected void changeToFollower(){
         role = RoleType.FOLLOWER;
-    }
-
-    public void setLeader(String leaderId){
-        this.leaderId = leaderId;
     }
 
     /*************************************** logEntry ***************************************/
@@ -175,45 +220,62 @@ public class RaftNode implements Serializable{
         nextIndex.clear();
         matchIndex.clear();
 
-        Set<String> nodeIdSet = RaftNetwork.clusterNodeIds(nodeId);
-        nodeIdSet.forEach(nodeId -> {
+        RaftClusterManager.otherNodes().forEach(nodeId -> {
             nextIndex.put(nodeId, initNextIndex);
             matchIndex.put(nodeId, -1);
         });
         commitIndex.set(-1);
     }
 
-    public void saveSnapshot(){
+    public void addNodeIndex(String nodeId){
+        if (!nextIndex.containsKey(nodeId)) {
+            nextIndex.put(nodeId, 0);
+            matchIndex.put(nodeId, -1);
+        }
+    }
+
+    public void removeNodeIndex(String nodeId){
+        if (nextIndex.containsKey(nodeId)) {
+            nextIndex.remove(nodeId);
+            matchIndex.remove(nodeId);
+        }
+    }
+
+    protected void saveSnapshot(){
         SnapshotUtils.save(this);
     }
 
     /*************************************** state machine ***************************************/
 
     /**
-     * 应用状态机到commitIndex位置为止
-     * @param commitIndex
+     * 应用日志到状态机，直到commitIndex位置位置（异步）
+     * [lastApplied+1，commitIndex]
+     *
+     * @param commitIdx
      */
-    public void applyTo(int commitIndex){
-        synchronized (stateMachine){
-            int startApplyIndex = lastApplied.get() + 1;
-            List<LogEntry> toApplyLogs = logModule.subLogs(startApplyIndex, commitIndex);
-            toApplyLogs.forEach(logEntry -> {
-                stateMachine.apply(logEntry);
-            });
-            lastApplied.set(commitIndex);
-        }
+    public Future<Boolean> applyTo(int commitIdx){
+        return logApplyExecutor.submit(() -> applyToSync(commitIdx));
     }
 
     /**
-     * 应用状态机 TODO 异步处理
-     * @param logEntry
-     * @param logIndex
+     * 应用日志到状态机，直到commitIndex位置位置
+     *
+     * @param commitIdx
+     * @return lastApplied >= commitIdx 返回true
      */
-    public void apply(LogEntry logEntry, int logIndex){
-        synchronized (stateMachine){
-            stateMachine.apply(logEntry);
-            lastApplied.set(logIndex);
+    public boolean applyToSync(int commitIdx){
+        synchronized (stateMachine) {
+            int startApplyIndex = lastApplied.get() + 1;
+            if (startApplyIndex > commitIdx) {
+                return true;
+            }
+            List<LogEntry> toApplyLogs = logModule.subLogs(startApplyIndex, commitIdx);
+            toApplyLogs.forEach(logEntry -> {
+                stateMachine.apply(logEntry);
+                lastApplied.incrementAndGet();
+            });
         }
+        return lastApplied.get() >= commitIdx;
     }
 
 }

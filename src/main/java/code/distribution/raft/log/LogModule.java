@@ -1,7 +1,6 @@
 package code.distribution.raft.log;
 
 import code.distribution.raft.RaftConst;
-import code.distribution.raft.kv.KvCommand;
 import code.distribution.raft.model.LogEntry;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -154,8 +153,7 @@ public class LogModule {
 
         stringBuilder.append("Value").append("\t");
         for (int i = 0; i < logs.size(); i++) {
-            KvCommand kvCommand = (KvCommand) logs.get(i).getCommand();
-            stringBuilder.append(kvCommand.getKey()).append("=>" ).append(kvCommand.getValue()).append("\t");
+            stringBuilder.append(logs.get(i).getCommand()).append("\t");
         }
         stringBuilder.append(RaftConst.LINE_SEP);
         return stringBuilder.toString();

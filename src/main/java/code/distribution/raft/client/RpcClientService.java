@@ -8,7 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈Rpc客户端服务〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao

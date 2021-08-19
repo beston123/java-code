@@ -1,9 +1,12 @@
 package code.distribution.raft.fsm;
 
+import code.distribution.raft.RaftNode;
+import code.distribution.raft.model.Command;
 import code.distribution.raft.model.LogEntry;
+import code.distribution.raft.model.NodeCommand;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈状态机〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
@@ -11,12 +14,20 @@ import code.distribution.raft.model.LogEntry;
  */
 public interface StateMachine {
 
-    void apply(LogEntry logEntry);
+    default void apply(LogEntry logEntry) {
+        if (logEntry.getCommand() instanceof NodeCommand) {
+            NodeStateMachine.getInstance().apply(logEntry.getCommand());
+        } else {
+            apply(logEntry.getCommand());
+        }
+    }
 
-    String getString(String key);
+    void apply(Command command);
 
-    void setString(String key, String value);
+    Object get(String key);
 
-    void delString(String key);
+    void set(String key, Object value);
+
+    void del(String key);
 
 }

@@ -5,7 +5,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈Rpc响应结果〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao

@@ -1,14 +1,11 @@
 package code.distribution.raft.client;
 
 import code.distribution.raft.RaftConfig;
-import code.distribution.raft.kv.KvCommand;
+import code.distribution.raft.RaftClusterManager;
 import org.apache.commons.lang3.RandomUtils;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
- * 〈一句话功能简述〉<p>
+ * 〈客户端〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
@@ -16,16 +13,12 @@ import java.util.List;
  */
 public class RaftClient {
 
-    private RpcClientService rpcClientService = new RpcClientService();
+    protected RpcClientService rpcClientService = new RpcClientService();
 
-    private String leader;
-
-    private List<String> clusterNodes = new ArrayList<>();
+    protected String leader;
 
     public RaftClient(RaftConfig raftConfig){
-        for (String node : raftConfig.parseClusterNodes()) {
-            clusterNodes.add(node);
-        }
+        RaftClusterManager.config(raftConfig.parseClusterNodes());
     }
 
     public ClientRet invoke(ClientReq req) {
@@ -44,8 +37,8 @@ public class RaftClient {
     }
 
     private String lookupLeader() {
-        ClientReq req = new ClientReq(true, KvCommand.buildGet(""));
-        String node = clusterNodes.get(RandomUtils.nextInt(0, clusterNodes.size()));
+        ClientReq req = new ClientReq(true, null);
+        String node = randomNode();
         ClientRet ret = rpcClientService.invoke(node, req);
         if (ret == null) {
             return null;
@@ -64,7 +57,7 @@ public class RaftClient {
     }
 
     public String randomNode(){
-        return clusterNodes.get(RandomUtils.nextInt(0, clusterNodes.size()));
+        return RaftClusterManager.allNodes().get(RandomUtils.nextInt(0, RaftClusterManager.nodeNum()));
     }
 
 }

@@ -6,7 +6,6 @@ import code.distribution.raft.election.ElectionService;
 import code.distribution.raft.election.RequestVoteHandler;
 import code.distribution.raft.enums.RoleType;
 import code.distribution.raft.fsm.StateMachine;
-import code.distribution.raft.kv.KvCommand;
 import code.distribution.raft.log.AppendEntriesHandler;
 import code.distribution.raft.log.AppendEntriesSender;
 import code.distribution.raft.model.*;
@@ -37,6 +36,8 @@ public class RaftNodeServer implements IService{
 
     private final HttpNettyServer httpNettyServer;
 
+    private final NodeManageService nodeManageService;
+
     public RaftNodeServer(String nodeId, StateMachine stateMachine) {
         this.node = new RaftNode(nodeId, stateMachine);
         this.requestVoteHandler = new RequestVoteHandler(node, this);
@@ -44,17 +45,18 @@ public class RaftNodeServer implements IService{
         this.electionService = new ElectionService(node, this);
         this.appendEntriesSender = new AppendEntriesSender(node, this);
         this.httpNettyServer = new HttpNettyServer(this);
+        this.nodeManageService = new NodeManageService(this);
     }
 
     public void initConfig(RaftConfig raftConfig){
-        RaftNetwork.config(raftConfig.parseClusterNodes());
+        RaftClusterManager.config(raftConfig);
     }
 
     @Override
     public void start() {
         LOGGER.info("Node {} start...", node.getNodeId());
         electionService.start();
-        //必须放最后
+        //放最后，等预热后再接受请求
         httpNettyServer.start();
     }
 
@@ -63,6 +65,7 @@ public class RaftNodeServer implements IService{
         LOGGER.info("Node {} stop...", node.getNodeId());
         electionService.close();
         appendEntriesSender.close();
+        nodeManageService.close();
         httpNettyServer.destroy();
         //保存快照
         node.saveSnapshot();
@@ -77,17 +80,22 @@ public class RaftNodeServer implements IService{
     }
 
     public ClientRet handleClientRequest(ClientReq clientReq){
-        if(node.getRole() == RoleType.FOLLOWER){
+        if (node.getRole() == RoleType.FOLLOWER) {
             return ClientRet.buildRedirect(node.getLeaderId());
-        }else if(node.getRole() == RoleType.CANDIDATE){
+        } else if (node.getRole() == RoleType.CANDIDATE) {
             return ClientRet.buildRedirect(null);
         }
 
-        if(clientReq.isRead()){
-            String key = ((KvCommand)clientReq.getCommand()).getKey();
-            String value = node.getStateMachine().getString(key);
+        //lookup leader请求
+        if (clientReq.getCommand() == null) {
+            return ClientRet.buildSuccess(null);
+        }
+
+        if (clientReq.isRead()) {
+            String key = ((BaseCommand) clientReq.getCommand()).getKey();
+            Object value = node.getStateMachine().get(key);
             return ClientRet.buildSuccess(value);
-        }else{
+        } else {
             boolean appendSuccess = appendEntriesSender.appendEntries(clientReq.getCommand());
             return ClientRet.build(appendSuccess);
         }
@@ -97,19 +105,55 @@ public class RaftNodeServer implements IService{
         this.electionService.resetElectionTimeout();
     }
 
+    public void changeToCandidate(){
+        node.setLeader(null);
+        node.changeToCandidate();
+    }
+
     public void changeToLeader(){
         node.changeToLeader();
         appendEntriesSender.start();
+        nodeManageService.start();
         electionService.pauseElection();
     }
 
-    public void changeToFollower(int newTerm){
-        node.getCurrentTerm().set(newTerm);
-        node.changeToFollower();
-        appendEntriesSender.close();
+    public boolean changeToFollower(int currentTerm, int newTerm){
+        if(node.compareAndSetTerm(currentTerm, newTerm)){
+            if(RoleType.LEADER == node.getRole()){
+                LOGGER.info("Leader[term={}] step down, newTerm={}", currentTerm, newTerm);
+                appendEntriesSender.close();
+                nodeManageService.close();
+            }
+            node.changeToFollower();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 接受leader的Rpc请求
+     * 1、设置leaderId
+     * 2、更新上次rpc时间戳
+     * 3、重置选举超时时间
+     * @param leaderId
+     */
+    public void acceptLeaderRpc(String leaderId){
+        node.setLeader(leaderId);
+        node.getLastRpcTimestamp().set(System.currentTimeMillis());
+        resetElectionTimeout();
     }
 
     public RaftNode getNode() {
         return node;
     }
+
+    public void addNode(String nodeId){
+        node.addNodeIndex(nodeId);
+        appendEntriesSender.addToAppend(nodeId);
+    }
+
+    public void removeNode(String nodeId){
+        node.removeNodeIndex(nodeId);
+    }
+
 }

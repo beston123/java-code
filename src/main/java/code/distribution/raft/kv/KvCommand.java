@@ -1,22 +1,19 @@
 package code.distribution.raft.kv;
 
-import code.distribution.raft.model.Command;
-import lombok.AllArgsConstructor;
+import code.distribution.raft.model.BaseCommand;
 import lombok.Data;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈Kv命令〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
  * @date 2019-11-04
  */
 @Data
-public class KvCommand implements Command {
+public class KvCommand extends BaseCommand {
 
     private Integer opType;
-
-    private String key;
 
     private String value;
 
@@ -24,8 +21,8 @@ public class KvCommand implements Command {
     }
 
     public KvCommand(Integer opType, String key, String value) {
-        this.opType = opType;
         this.key = key;
+        this.opType = opType;
         this.value = value;
     }
 
@@ -39,5 +36,9 @@ public class KvCommand implements Command {
 
     public static KvCommand buildDel(String key){
         return new KvCommand(KvOpType.DEL, key, null);
+    }
+
+    public String toString(){
+        return opType + ":" + key + "=>" +value;
     }
 }

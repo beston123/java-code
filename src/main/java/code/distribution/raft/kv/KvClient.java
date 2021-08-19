@@ -1,24 +1,25 @@
-package code.distribution.raft.client;
+package code.distribution.raft.kv;
 
 import code.distribution.raft.RaftConfig;
-import code.distribution.raft.kv.KvCommand;
+import code.distribution.raft.client.ClientReq;
+import code.distribution.raft.client.ClientRet;
+import code.distribution.raft.client.RaftClient;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.util.Assert;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈Kv客户端〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
  * @date 2019-11-06
  */
 
-public class RaftClientTest {
+public class KvClient {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(RaftClientTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(KvClient.class);
 
     private RaftClient raftClient;
 
@@ -101,6 +102,22 @@ public class RaftClientTest {
         get("b");// b=>null
         get("c");// c=>3
         get("d");// d=>4
+        System.out.println("------------------");
+    }
+
+    @Test
+    public void crud2(){
+        set("b", "8");
+        set("c", "9");
+        del("d");
+
+        System.out.println("------------------");
+
+        get("a");// a=>4
+        get("b");// b=>8
+        get("c");// c=>9
+        get("d");// d=>null
+
         System.out.println("------------------");
     }
 

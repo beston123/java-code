@@ -35,7 +35,7 @@ public class RpcService extends RpcHttpClient {
             LOGGER.debug("Vote request to {} success, {}", nodeId, raftResponse.getResponse());
             return (RequestVoteRet) raftResponse.getResponse();
         }
-        LOGGER.error("Vote request to {} fail {}", nodeId, raftResponse.getErrorMsg());
+        LOGGER.error("Vote request to {} fail, {}", nodeId, raftResponse.getErrorMsg());
         return null;
     }
 
@@ -45,7 +45,7 @@ public class RpcService extends RpcHttpClient {
             LOGGER.debug("Append entries to {} success, {}", nodeId, raftResponse.getResponse());
             return (AppendEntriesRet) raftResponse.getResponse();
         }
-        LOGGER.error("Append entries to {} fail {}", nodeId, raftResponse.getErrorMsg());
+        LOGGER.error("Append entries to {} fail, {}", nodeId, raftResponse.getErrorMsg());
         return null;
     }
 

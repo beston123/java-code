@@ -3,10 +3,9 @@ package code.distribution.raft.boot;
 import code.distribution.raft.RaftConfig;
 import code.distribution.raft.RaftNodeServer;
 import code.distribution.raft.fsm.StateMachine;
-import code.distribution.raft.kv.KvStateMachine;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈Raft启动端〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
@@ -15,19 +14,25 @@ import code.distribution.raft.kv.KvStateMachine;
 public class RaftBootstrap {
 
     /**
-     * java code.distribution.raft.boot.RaftBootstrap 127.0.0.1:2001 127.0.0.1:2001,127.0.0.1:2002,127.0.0.1:2003
+     * java [bootClass] 127.0.0.1:2001 127.0.0.1:2001,127.0.0.1:2002,127.0.0.1:2003
      *
      * @param args
      */
-    public static void main(String[] args) {
-        String nodeId = args[0];
-        String clusterNodes = args[1];
-
-        StateMachine stateMachine = new KvStateMachine();
-        RaftNodeServer raftNodeServer = new RaftNodeServer(nodeId, stateMachine);
-
+    public void start(String[] args, StateMachine stateMachine){
+        if(args.length != 2){
+            System.out.println("Usage: ");
+            System.out.println("\tjava [bootstrapClass] [nodeId] [clusterNodes...]");
+            System.out.println("Example: java org.raft.BootStrap 127.0.0.1:2001 127.0.0.1:2001,127.0.0.1:2002,127.0.0.1:2003");
+            System.exit(1);
+        }
         RaftConfig raftConfig = new RaftConfig();
-        raftConfig.setClusterNodes(clusterNodes);
+        raftConfig.setNodeId(args[0]);
+        raftConfig.setClusterNodes(args[1]);
+        start(raftConfig, stateMachine);
+    }
+
+    public void start(RaftConfig raftConfig, StateMachine stateMachine){
+        RaftNodeServer raftNodeServer = new RaftNodeServer(raftConfig.getNodeId(), stateMachine);
         raftNodeServer.initConfig(raftConfig);
 
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
@@ -38,4 +43,5 @@ public class RaftBootstrap {
         }));
         raftNodeServer.start();
     }
+
 }

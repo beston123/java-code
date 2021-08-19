@@ -14,6 +14,11 @@ import org.apache.commons.lang3.StringUtils;
 public class RaftConfig {
 
     /**
+     * 机器节点Id
+     */
+    private String nodeId;
+
+    /**
      * 集群节点配置，以英文逗号,或分号;分隔
      */
     private String clusterNodes;

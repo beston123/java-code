@@ -1,7 +1,7 @@
 package code.distribution.raft.kv;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈Kv操作类型〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao

@@ -38,21 +38,19 @@ public class AppendEntriesHandler implements IHandler<AppendEntriesReq, AppendEn
     @Override
     public AppendEntriesRet handle(AppendEntriesReq appendEntriesReq) {
         int currentTerm = node.currentTerm();
-        //1.1、如果收到的任期比当前任期小,返回false
+        //1.1如果收到的任期比当前任期小,返回false
         if (appendEntriesReq.getTerm() < currentTerm) {
             return AppendEntriesRet.fail(currentTerm);
-        //1.2如果RPC请求或者响应包含的任期T > currentTerm，将currentTerm设置为T并转换为Follower
+        //1.2如果RPC请求或者响应包含的任期T > currentTerm，将currentTerm设置为T，并转换为Follower
         } else if (appendEntriesReq.getTerm() > currentTerm) {
-            node.getCurrentTerm().compareAndSet(currentTerm, appendEntriesReq.getTerm());
-            currentTerm = node.currentTerm();
+            nodeServer.changeToFollower(currentTerm, appendEntriesReq.getTerm());
+            currentTerm = appendEntriesReq.getTerm();
+        } else {
+            nodeServer.changeToFollower(currentTerm, appendEntriesReq.getTerm());
         }
 
-        //1.3收到Leader节点的AppendEntries请求，转换为Follower节点
-        node.setLeader(appendEntriesReq.getLeaderId());
-        node.changeToFollower();
-
-        //2、重置选择超时时间
-        nodeServer.resetElectionTimeout();
+        //2、接受Leader节点的AppendEntries请求
+        nodeServer.acceptLeaderRpc(appendEntriesReq.getLeaderId());
 
         //3、处理日志复制
         if (appendEntriesReq.getEntries() == null) {
@@ -143,7 +141,7 @@ public class AppendEntriesHandler implements IHandler<AppendEntriesReq, AppendEn
 
             int newCommitIndex = Math.min(leaderCommit, lastIndex);
             node.setCommitIndex(newCommitIndex);
-            //应用状态机到 commitIndex TODO 异步
+            //应用状态机到 commitIndex
             node.applyTo(newCommitIndex);
         }
     }

@@ -2,7 +2,7 @@ package code.distribution.raft.election;
 
 import code.distribution.raft.ISender;
 import code.distribution.raft.IService;
-import code.distribution.raft.RaftNetwork;
+import code.distribution.raft.RaftClusterManager;
 import code.distribution.raft.RaftNode;
 import code.distribution.raft.enums.RoleType;
 import code.distribution.raft.model.LogEntry;
@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * 〈请求投票 发送器〉<p>
@@ -40,6 +39,10 @@ public class RequestVoteSender implements ISender<RequestVoteReq, RequestVoteRet
     }
 
     public List<RequestVoteRet> broadcastRequestVote() {
+        return broadcastRequestVote(node.currentTerm(), false);
+    }
+
+    public List<RequestVoteRet> broadcastRequestVote(int currentTerm, boolean preVote) {
         List<RequestVoteRet> requestVoteRets = new ArrayList<>();
         String myNodeId = node.getNodeId();
 
@@ -50,11 +53,10 @@ public class RequestVoteSender implements ISender<RequestVoteReq, RequestVoteRet
             lastLogIndex = lastLogPair.getLeft();
             lastLogTerm = lastLogPair.getRight().getTerm();
         }
-        RequestVoteReq req = RequestVoteReq.build(node.currentTerm(), myNodeId, lastLogIndex, lastLogTerm);
+        RequestVoteReq req = RequestVoteReq.build(currentTerm, myNodeId, lastLogIndex, lastLogTerm, preVote);
 
-        Set<String> nodeIdSet = RaftNetwork.clusterNodeIds(myNodeId);
-        nodeIdSet.parallelStream().forEach(nodeId -> {
-            if (node.getRole() == RoleType.CANDIDATE) {
+        RaftClusterManager.otherNodes().parallelStream().forEach(nodeId -> {
+            if (node.getRole() == RoleType.CANDIDATE || preVote) {
                 LOGGER.debug("Send vote request to {}", nodeId);
                 RequestVoteRet ret = send(nodeId, req);
                 if (ret != null) {

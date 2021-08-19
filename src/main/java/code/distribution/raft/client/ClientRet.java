@@ -6,7 +6,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈客户端响应结果〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
@@ -18,7 +18,7 @@ public class ClientRet implements Serializable {
 
     private boolean success;
 
-    private String value;
+    private Object value;
 
     private String leaderId;
 
@@ -26,7 +26,7 @@ public class ClientRet implements Serializable {
         return new ClientRet(success, null, null);
     }
 
-    public static ClientRet buildSuccess(String value){
+    public static ClientRet buildSuccess(Object value){
         return new ClientRet(true, value, null);
     }
 

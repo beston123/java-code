@@ -13,16 +13,7 @@ public class ThreadPool {
 
     private static int keepAliveMin = 5;
 
-    private static RejectedExecutionHandler rejectedExecutionHandler = new RejectedExecutionHandler() {
-        @Override
-        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
-            try {
-                executor.getQueue().put(r);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-    };
+    private static RejectedExecutionHandler rejectedExecutionHandler = new ThreadPoolExecutor.CallerRunsPolicy();
 
     public static ExecutorService createSingle(int queueSize){
         return create(1, 1, queueSize);

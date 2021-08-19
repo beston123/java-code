@@ -20,9 +20,15 @@ public class SnapshotUtils {
 
     public static void save(RaftNode raftNode){
         try {
-            File file = new File("/data/www/raft/"+ raftNode.getNodeId().replace(":", "_"));
+            String raftHome = System.getProperty("user.home") + "/raft/";
+            File raftHomeFile = new File(raftHome);
+            if (!raftHomeFile.exists()) {
+                raftHomeFile.mkdir();
+            } else if (!raftHomeFile.isDirectory()) {
+                throw new IOException("Raft home is not directory: " + raftHome);
+            }
+            File file = new File(raftHome + raftNode.getNodeId().replace(":", "_"));
             file.createNewFile();
-
 
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.append("--------------------").append(LocalDateTime.now()).append("--------------------").append(RaftConst.LINE_SEP);

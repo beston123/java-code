@@ -7,7 +7,6 @@ import code.distribution.raft.model.AppendEntriesRet;
 import code.distribution.raft.model.Command;
 import code.distribution.raft.model.LogEntry;
 import code.distribution.raft.rpc.RpcService;
-import code.util.ConcurrentHashSet;
 import code.util.NamedThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,26 +39,19 @@ public class AppendEntriesSender implements ISender<AppendEntriesReq, AppendEntr
      */
     private final Map<String, Integer> toRetryAppendNodeMap = new ConcurrentHashMap<>();
 
-    private RejectedExecutionHandler rejectedExecutionHandler = (r, executor) -> {
-        executor.getQueue().poll();
-        try {
-            executor.getQueue().put(r);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    };
+    private final Set<String> newNodeToAppend = new HashSet<>();
 
     /**
      * 日志复制失败重发定时器
      */
     private final ScheduledExecutorService retryAppendEntriesTimer = new ScheduledThreadPoolExecutor(1,
-            new NamedThreadFactory("RetryAppendEntriesTimer-"), rejectedExecutionHandler);
+            new NamedThreadFactory("RetryAppendEntriesTimer-"), new ThreadPoolExecutor.CallerRunsPolicy());
 
     /**
      * 心跳定时器
      */
     private final ScheduledExecutorService heartbeatTimer = new ScheduledThreadPoolExecutor(1,
-            new NamedThreadFactory("HeartbeatTimer-"), rejectedExecutionHandler);
+            new NamedThreadFactory("HeartbeatTimer-"), new ThreadPoolExecutor.CallerRunsPolicy());
 
     private AtomicBoolean running = new AtomicBoolean(false);
 
@@ -73,24 +65,11 @@ public class AppendEntriesSender implements ISender<AppendEntriesReq, AppendEntr
         running.set(true);
 
         retryAppendEntriesTimer.scheduleAtFixedRate(() -> {
-            Iterator<Map.Entry<String, Integer>> iterator = toRetryAppendNodeMap.entrySet().iterator();
-            int commitIndex = node.getCommitIndex().get();
-            while (running.get() && node.getRole() == RoleType.LEADER && iterator.hasNext()){
-                Map.Entry<String, Integer> entry = iterator.next();
-                //复制成功，把改node从重试列表删除
-                if(replication(entry.getKey(), entry.getValue(), commitIndex)){
-                    iterator.remove();
-                }
-            }
-            //如果不再是leader清空
-            if(node.getRole() != RoleType.LEADER){
-                toRetryAppendNodeMap.clear();
-            }
-        }, 0, RaftConst.RETRY_APPEND_MS, TimeUnit.MILLISECONDS);
+            retryAppendEntries();
+        }, RaftConst.SCHEDULER_DELAY_MS, RaftConst.RETRY_APPEND_MS, TimeUnit.MILLISECONDS);
 
         heartbeatTimer.scheduleAtFixedRate(() -> {
-            Set<String> nodeSet = RaftNetwork.clusterNodeIds(node.getNodeId());
-            nodeSet.forEach(nodeId -> {
+            RaftClusterManager.otherNodes().parallelStream().forEach(nodeId -> {
                 if (running.get() && node.getRole() == RoleType.LEADER) {
                     heartbeat(nodeId);
                 }
@@ -108,7 +87,6 @@ public class AppendEntriesSender implements ISender<AppendEntriesReq, AppendEntr
         node.getLogModule().append(logEntry);
 
         int newLogIndex = node.getLogModule().lastLogIndex();
-
         AtomicInteger successNum = new AtomicInteger();
         //需要重试的节点列表
         Map<String, Integer> tempRetryNodeMap = new HashMap<>();
@@ -121,7 +99,7 @@ public class AppendEntriesSender implements ISender<AppendEntriesReq, AppendEntr
         });
 
         //多数派复制成功
-        if (node.getRole() == RoleType.LEADER && successNum.get() >= RaftNetwork.nodeNum() / 2) {
+        if (successNum.get() >= RaftClusterManager.nodeNum() / 2) {
             //日志提交, commitIndex在下次AppendEntries给其他节点（也可以放在心跳）
             updateCommitIndex(commitIndex, currentTerm);
             LOGGER.info("多数派复制成功，success:{}， 提交日志，commitIndex:{}", successNum, node.getCommitIndex().get());
@@ -130,7 +108,7 @@ public class AppendEntriesSender implements ISender<AppendEntriesReq, AppendEntr
             toRetryAppendNodeMap.putAll(tempRetryNodeMap);
 
             //应用状态机
-            node.apply(logEntry, newLogIndex);
+            node.applyTo(node.getCommitIndex().get());
             return true;
         } else {
             LOGGER.info("多数派复制失败，success:{}，回滚.", successNum);
@@ -199,7 +177,7 @@ public class AppendEntriesSender implements ISender<AppendEntriesReq, AppendEntr
                 LOGGER.info("<<<复制日志到节点 {} 失败，myTerm: {}, responseTerm: " + ret.getTerm(), nodeId, myTerm);
                 if (ret.getTerm() > myTerm) {
                     //退位
-                    changeToFollower(myTerm, ret.getTerm());
+                    nodeServer.changeToFollower(myTerm, ret.getTerm());
                 } else {
                     //复制失败，nextIndex-1
                     node.getNextIndex().put(nodeId, nextIndex - 1);
@@ -224,6 +202,34 @@ public class AppendEntriesSender implements ISender<AppendEntriesReq, AppendEntr
     }
 
     /**
+     * 重试日志复制
+     */
+    private void retryAppendEntries(){
+        Iterator<String> newNodeIte = newNodeToAppend.iterator();
+        while (running.get() && newNodeIte.hasNext()){
+            String nodeId = newNodeIte.next();
+            if(!toRetryAppendNodeMap.containsKey(nodeId)){
+                toRetryAppendNodeMap.put(nodeId, node.getLogModule().lastLogIndex());
+            }
+            newNodeIte.remove();
+        }
+
+        Iterator<Map.Entry<String, Integer>> toRetryIte = toRetryAppendNodeMap.entrySet().iterator();
+        int commitIndex = node.getCommitIndex().get();
+        while (running.get() && toRetryIte.hasNext()){
+            Map.Entry<String, Integer> entry = toRetryIte.next();
+            //节点已删除
+            if (!RaftClusterManager.exist(entry.getKey())) {
+                toRetryIte.remove();
+            }
+            //复制成功，把该node从重试列表删除
+            if(replication(entry.getKey(), entry.getValue(), commitIndex)){
+                toRetryIte.remove();
+            }
+        }
+    }
+
+    /**
      * 发送心跳
      *
      * @param nodeId
@@ -233,16 +239,16 @@ public class AppendEntriesSender implements ISender<AppendEntriesReq, AppendEntr
         LOGGER.debug("Send heartbeat to {}", nodeId);
         AppendEntriesRet heartbeatRet = send(nodeId, appendEntriesReq);
         if (heartbeatRet != null && !heartbeatRet.isSuccess()) {
-            int nowTerm = node.currentTerm();
-            if (heartbeatRet.getTerm() > nowTerm) {
-                changeToFollower(nowTerm, heartbeatRet.getTerm());
+            int currentTerm = node.currentTerm();
+            if (heartbeatRet.getTerm() > currentTerm) {
+                nodeServer.changeToFollower(currentTerm, heartbeatRet.getTerm());
             }
         }
     }
 
-    private void changeToFollower(int nowTerm, int newTerm) {
-        if (node.getCurrentTerm().compareAndSet(nowTerm, newTerm)) {
-            nodeServer.changeToFollower(newTerm);
+    public void addToAppend(String nodeId){
+        if (!newNodeToAppend.contains(nodeId)) {
+            newNodeToAppend.add(nodeId);
         }
     }
 
@@ -251,6 +257,7 @@ public class AppendEntriesSender implements ISender<AppendEntriesReq, AppendEntr
         running.set(false);
         retryAppendEntriesTimer.shutdownNow();
         heartbeatTimer.shutdownNow();
+        toRetryAppendNodeMap.clear();
     }
 
     @Override
