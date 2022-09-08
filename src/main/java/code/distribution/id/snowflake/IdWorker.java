@@ -1,4 +1,4 @@
-package code.distribution.id.Snowflake;
+package code.distribution.id.snowflake;
 
 /**
  * 〈Snowflake算法〉<p>
@@ -141,7 +141,7 @@ public class IdWorker {
         return idWorker;
     }
 
-    public static long initWorkerId() {
+    private static long initWorkerId() {
         InetAddress address;
         try {
             address = InetAddress.getLocalHost();
@@ -152,7 +152,7 @@ public class IdWorker {
         return ((ipAddressByteArray[ipAddressByteArray.length - 2] & 0B11) << Byte.SIZE) + (ipAddressByteArray[ipAddressByteArray.length - 1] & 0xFF);
     }
 
-    public static void init(Long serverNodeId) {
+    private static void init(Long serverNodeId) {
         if (idWorker == null) {
             synchronized (IdWorker.class) {
                 if (idWorker == null) {

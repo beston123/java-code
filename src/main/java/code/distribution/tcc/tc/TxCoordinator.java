@@ -4,7 +4,7 @@ import code.distribution.tcc.common.BranchState;
 import code.distribution.tcc.common.TxMethod;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈事务协调器〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
@@ -14,12 +14,12 @@ public interface TxCoordinator {
 
     String beginGlobal();
 
-    boolean registerBranch(String xid, String branchId, TxMethod tccMethod);
+    boolean registerBranch(String xid, Long branchId, TxMethod tccMethod);
 
     boolean commitGlobal(String xid);
 
     boolean rollbackGlobal(String xid);
 
-    boolean reportBranch(String xid, String branchId, BranchState state);
+    boolean reportBranch(String xid, Long branchId, BranchState state);
 
 }

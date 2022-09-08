@@ -12,15 +12,15 @@ import lombok.Data;
 @Data
 public class BranchTx {
 
-    private String id;
+    private Long id;
 
     private BranchState state;
 
-    private TxMethod methods;
+    private TxMethod method;
 
-    public BranchTx(String id, BranchState state, TxMethod methods) {
+    public BranchTx(Long id, BranchState state, TxMethod methods) {
         this.id = id;
         this.state = state;
-        this.methods = methods;
+        this.method = methods;
     }
 }

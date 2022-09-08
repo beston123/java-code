@@ -3,7 +3,7 @@ package code.distribution.tcc.rm;
 import code.distribution.tcc.common.TxMethod;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈资源管理器〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
@@ -11,19 +11,12 @@ import code.distribution.tcc.common.TxMethod;
  */
 public interface ResManager {
 
-    boolean registerBranch(String xid, String branchId, TxMethod tccMethod);
+    boolean registerBranch(String xid, Long branchId, TxMethod tccMethod);
 
-    boolean onePhase(String xid, String branchId);
+    boolean onePhase(String xid, Long branchId);
 
-    boolean commit(String xid, String branchId);
+    boolean commit(String xid, Long branchId);
 
-    boolean rollback(String xid, String branchId);
-
-    boolean beforeTry(String xid, String branchId);
-
-    boolean beforeConfirm(String xid, String branchId);
-
-    boolean beforeCancel(String xid, String branchId);
-
+    boolean rollback(String xid, Long branchId);
 
 }

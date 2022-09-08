@@ -1,9 +1,9 @@
-package code.distribution.tcc.common;
+package code.distribution.tcc.annotation;
 
 import java.lang.annotation.*;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈TCC分支事务〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
@@ -12,13 +12,13 @@ import java.lang.annotation.*;
 @Target({ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface TccAction {
+public @interface TccBranch {
 
     /**
-     * 预占方法
+     * 分支名称
      * @return
      */
-    String try1();
+    String actionName();
 
     /**
      * 确认方法

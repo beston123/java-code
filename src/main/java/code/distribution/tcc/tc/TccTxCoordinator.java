@@ -1,11 +1,12 @@
 package code.distribution.tcc.tc;
 
 import code.distribution.tcc.common.*;
+import code.distribution.tcc.rm.TccFlowHandler;
 
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 〈一句话功能简述〉<p>
+ * 〈TCC事务协调器〉<p>
  * 〈功能详细描述〉
  *
  * @author zixiao
@@ -29,7 +30,7 @@ public class TccTxCoordinator implements TxCoordinator {
     }
 
     @Override
-    public boolean registerBranch(String xid, String branchId, TxMethod tccMethod) {
+    public boolean registerBranch(String xid, Long branchId, TxMethod tccMethod) {
         GlobalTx globalTx = globalSessionMap.get(xid);
         if (globalTx == null || globalTx.getState() != GlobalState.PROCESSING) {
             return false;
@@ -67,10 +68,10 @@ public class TccTxCoordinator implements TxCoordinator {
         System.out.println("-----------二阶段提交-----------");
         for (BranchTx branch : globalTx.getBranches()) {
             //必须一阶段成功，才能提交
-            if(branch.getState() == BranchState.ONE_PHASE_OK){
+            if (branch.getState() == BranchState.ONE_PHASE_OK) {
                 //设置为提交中
                 branch.setState(BranchState.TWO_COMMITTING);
-                if (branch.getMethods().doConfirm()) {
+                if (TccFlowHandler.getInstance().beforeConfirm(xid, branch.getId(), branch.getMethod())) {
                     branch.setState(BranchState.TWO_COMMIT_OK);
                 } else {
                     flag = false;
@@ -106,10 +107,10 @@ public class TccTxCoordinator implements TxCoordinator {
         System.out.println("-----------二阶段回滚-----------");
         for (BranchTx branch : globalTx.getBranches()) {
             //一阶段成功或执行中
-            if(branch.getState() == BranchState.ONE_PHASE_OK || branch.getState() == BranchState.INITIAL){
+            if (branch.getState() == BranchState.ONE_PHASE_OK || branch.getState() == BranchState.INITIAL) {
                 //设置为回滚中
                 branch.setState(BranchState.TWO_ROLLING_BACK);
-                if (branch.getMethods().doCancel()) {
+                if (TccFlowHandler.getInstance().beforeCancel(xid, branch.getId(), branch.getMethod())) {
                     branch.setState(BranchState.TWO_ROLLBACK_OK);
                 } else {
                     flag = false;
@@ -123,7 +124,7 @@ public class TccTxCoordinator implements TxCoordinator {
         return flag;
     }
 
-    public boolean reportBranch(String xid, String branchId, BranchState state) {
+    public boolean reportBranch(String xid, Long branchId, BranchState state) {
         GlobalTx globalTx = globalSessionMap.get(xid);
         if (globalTx == null || globalTx.getState() != GlobalState.PROCESSING) {
             return false;
@@ -131,10 +132,10 @@ public class TccTxCoordinator implements TxCoordinator {
 
         // 分支事务状态必须严格按状态机变更
         for (BranchTx branch : globalTx.getBranches()) {
-            if(!branchId.equals(branch.getId())){
+            if (!branchId.equals(branch.getId())) {
                 continue;
             }
-            if(branch.getState() == BranchState.TWO_COMMIT_OK || branch.getState() == BranchState.TWO_ROLLBACK_OK){
+            if (branch.getState() == BranchState.TWO_COMMIT_OK || branch.getState() == BranchState.TWO_ROLLBACK_OK) {
                 return false;
             }
             branch.setState(state);

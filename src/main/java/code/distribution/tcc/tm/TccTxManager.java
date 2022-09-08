@@ -2,6 +2,7 @@ package code.distribution.tcc.tm;
 
 import code.distribution.at.common.RoleType;
 import code.distribution.at.utils.Log;
+import code.distribution.tcc.common.TxContainer;
 import code.distribution.tcc.tc.TccTxCoordinator;
 import code.distribution.tcc.tc.TxCoordinator;
 
@@ -27,6 +28,7 @@ public class TccTxManager implements TxManager {
     @Override
     public String begin() {
         String xid = tc.beginGlobal();
+        TxContainer.setXid(xid);
         log.info("Global tx begin, xid=" + xid);
         return xid;
     }

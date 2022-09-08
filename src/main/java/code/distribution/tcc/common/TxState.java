@@ -9,6 +9,6 @@ package code.distribution.tcc.common;
  */
 public enum TxState {
 
-    INIT, COMMIT, ROLLBACK
+    TRIED, COMMITTED, ROLLBACKED
 
 }
