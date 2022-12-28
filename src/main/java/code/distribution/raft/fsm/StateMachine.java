@@ -1,6 +1,5 @@
 package code.distribution.raft.fsm;
 
-import code.distribution.raft.RaftNode;
 import code.distribution.raft.model.Command;
 import code.distribution.raft.model.LogEntry;
 import code.distribution.raft.model.NodeCommand;

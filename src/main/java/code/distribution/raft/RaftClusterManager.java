@@ -1,6 +1,5 @@
 package code.distribution.raft;
 
-import code.distribution.raft.model.NodeCommand;
 import code.distribution.raft.model.NodeEvent;
 
 import java.util.ArrayList;

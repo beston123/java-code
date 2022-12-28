@@ -3,7 +3,6 @@ package code.distribution.raft.kv;
 import code.distribution.raft.RaftConst;
 import code.distribution.raft.fsm.StateMachine;
 import code.distribution.raft.model.Command;
-import code.distribution.raft.model.LogEntry;
 
 import java.util.HashMap;
 import java.util.Map;
